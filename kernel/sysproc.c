@@ -95,3 +95,10 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_howmanycmpt(void)
+{
+// returns how many process with the name cmpt are running
+return howmanycmpt();
+}

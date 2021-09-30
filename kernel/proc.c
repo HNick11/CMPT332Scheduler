@@ -654,3 +654,21 @@ procdump(void)
     printf("\n");
   }
 }
+
+int
+howmanycmpt(void){
+// determine how many processes that are running, with the name cmpt and return said value
+int n_cmpt = 0;
+
+struct proc *p;
+char *cmpt = "cmpt";
+
+for(p = proc; p < &proc[NPROC];p++){
+	char substring[5];
+	strncpy(substring,p->name,4);
+	if(strncmp(substring,cmpt,4) == 0){
+		n_cmpt++;
+	}
+}
+return n_cmpt;
+}
