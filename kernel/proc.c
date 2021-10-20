@@ -273,6 +273,7 @@ int
 fork(void)
 {
   int i, pid;
+  uint icreated;
   struct proc *np;
   struct proc *p = myproc();
 
@@ -311,7 +312,13 @@ fork(void)
   np->parent = p;
   release(&wait_lock);
 
+  acquire(&tickslock);
+  icreated = ticks;
+  release(&tickslock);
+
   acquire(&np->lock);
+  np->running = 0;
+  np->created = icreated;
   np->state = RUNNABLE;
   release(&np->lock);
 
@@ -341,6 +348,7 @@ exit(int status)
 {
   struct proc *p = myproc();
 
+  uint t;
   if(p == initproc)
     panic("init exiting");
 
@@ -358,6 +366,12 @@ exit(int status)
   end_op();
   p->cwd = 0;
 
+
+  // fill in the ended field
+  acquire(&tickslock);
+  t = ticks;
+  release(&tickslock);
+
   acquire(&wait_lock);
 
   // Give any children to init.
@@ -368,6 +382,7 @@ exit(int status)
   
   acquire(&p->lock);
 
+  p->ended = t;
   p->xstate = status;
   p->state = ZOMBIE;
 
@@ -427,6 +442,75 @@ wait(uint64 addr)
   }
 }
 
+
+// Wait for a child process to exit and return its pid.
+// Return -1 if this process has no children.
+int
+waitstat(uint64 addr, uint64 nturnaround, uint64 estimate)
+{
+  struct proc *np;
+  int havekids, pid;
+  struct proc *p = myproc();
+
+  acquire(&wait_lock);
+
+  for(;;){
+    // Scan through table looking for exited children.
+    havekids = 0;
+    for(np = proc; np < &proc[NPROC]; np++){
+      if(np->parent == p){
+        // make sure the child isn't still in exit() or swtch().
+        acquire(&np->lock);
+
+        // calculate the turnaround time
+        uint turnarondtime = (np->ended) - (np->created);
+
+
+        havekids = 1;
+        if(np->state == ZOMBIE){
+          // Found one.
+          pid = np->pid;
+          if(addr != 0 && copyout(p->pagetable, addr, (char *)&np->xstate,
+                                  sizeof(np->xstate)) < 0) {
+            release(&np->lock);
+            release(&wait_lock);
+            return -1;
+          }
+          // Turnaround time
+          if(nturnaround != 0 && copyout(p->pagetable, nturnaround, (char *)&turnarondtime,
+                                  sizeof(turnarondtime)) < 0) {
+            release(&np->lock);
+            release(&wait_lock);
+            return -1;
+          }
+          // Estimated running time
+          if(estimate != 0 && copyout(p->pagetable, estimate, (char *)&np->running,
+                                  sizeof(np->running)) < 0) {
+            release(&np->lock);
+            release(&wait_lock);
+            return -1;
+          }
+          
+          freeproc(np);
+          release(&np->lock);
+          release(&wait_lock);
+          return pid;
+        }
+        release(&np->lock);
+      }
+    }
+
+    // No point waiting if we don't have any children.
+    if(!havekids || p->killed){
+      release(&wait_lock);
+      return -1;
+    }
+    
+    // Wait for a child to exit.
+    sleep(p, &wait_lock);  //DOC: wait-sleep
+  }
+}
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -439,7 +523,9 @@ scheduler(void)
 {
   struct proc *p;
   struct cpu *c = mycpu();
-  
+  uint before;
+  uint after;
+
   c->proc = 0;
   for(;;){
     // Avoid deadlock by ensuring that devices can interrupt.
@@ -453,8 +539,20 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+
+      
+        before = ticks;
+        
+
         swtch(&c->context, &p->context);
 
+    
+        after = ticks;
+      
+
+        if(before != after){
+          p->running++;
+        }
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
