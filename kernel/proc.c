@@ -15,6 +15,9 @@ struct proc *initproc;
 int nextpid = 1;
 struct spinlock pid_lock;
 
+int moveup = 0;
+struct spinlock moveup_lock;
+
 extern void forkret(void);
 static void freeproc(struct proc *p);
 
@@ -50,6 +53,7 @@ procinit(void)
   
   initlock(&pid_lock, "nextpid");
   initlock(&wait_lock, "wait_lock");
+  initlock(&moveup_lock, "moveup_lock");
   for(p = proc; p < &proc[NPROC]; p++) {
       initlock(&p->lock, "proc");
       p->kstack = KSTACK((int) (p - proc));
@@ -119,7 +123,7 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
-
+  p->prio = HIGH;
   // Allocate a trapframe page.
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
@@ -319,6 +323,8 @@ fork(void)
   acquire(&np->lock);
   np->running = 0;
   np->created = icreated;
+  np->prio = HIGH;
+  np->timesran = 0;
   np->state = RUNNABLE;
   release(&np->lock);
 
@@ -525,6 +531,7 @@ scheduler(void)
   struct cpu *c = mycpu();
   uint before;
   uint after;
+  int cur_prio = 0;
 
   c->proc = 0;
   for(;;){
@@ -533,20 +540,38 @@ scheduler(void)
 
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
-      if(p->state == RUNNABLE) {
+      if(p->state == RUNNABLE && p->prio <= cur_prio) {
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+        
+        
+        // increment moveup, check prio's
+        acquire(&moveup_lock);
+        moveup++;
+        release(&moveup_lock);
+    
 
-      
+        // Reassign priority, if necessary
+        if(p->prio == HIGH){
+          p->prio++;
+        }
+        else if(p->prio == MEDIUM){
+          p->timesran++;
+          if(p->timesran == MTIMES){
+            p->prio = LOW;
+          }
+        }
+        
+        // run process
         before = ticks;
         
 
         swtch(&c->context, &p->context);
 
-    
+
         after = ticks;
       
 
@@ -556,9 +581,23 @@ scheduler(void)
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
+        cur_prio = 0;
       }
       release(&p->lock);
     }
+    acquire(&moveup_lock);
+    if(moveup == MOVEUP){
+        for (p = proc; p < &proc[NPROC]; p++){
+            acquire(&p->lock);
+            p->prio = HIGH;
+            p->timesran = 0;
+            release(&p->lock);
+          }
+          moveup = 0;
+        }
+    release(&moveup_lock);
+    cur_prio++;
+    
   }
 }
 
