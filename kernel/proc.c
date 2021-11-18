@@ -21,6 +21,7 @@ static void freeproc(struct proc *p);
 
 extern struct topic listoftopics[NUMTWEETTOPICS];
 extern struct tweet spacefortweets[MAXTWEETTOTAL];
+extern int tweetchans[NUMTWEETTOPICS];
 extern int n_tweets;
 
 int putchan = 1;
@@ -680,7 +681,7 @@ int btput(topics tag, uint64 message)
   // Get topic lock
   acquire(&cur_topic.lock);
   while(newtweet(tag,copied_message) < 0){
-    sleep(&getchan, &cur_topic.lock);
+    sleep(&tweetchans[tag], &cur_topic.lock);
   }
   //wakeup(chan needed);
   release(&cur_topic.lock);
@@ -711,7 +712,7 @@ int tput(topics tag, uint64 message)
   release(&cur_topic.lock);
   
   // Wakeup process sleeping on this tweets
-  wakeup(&putchan);
+  wakeup(&tweetchans[tag]);
 
 
   return val;
@@ -736,10 +737,10 @@ int btget(topics tag, uint64 buf)
   
   // document the effect of only having two chan's
   while(removetweet(tag,copied_message) < 0){
-    sleep(&putchan, &cur_topic.lock);
+    sleep(&tweetchans[tag], &cur_topic.lock);
   }
   
-  wakeup(&getchan);
+  wakeup(&tweetchans[tag]);
 
   release(&cur_topic.lock);
 
@@ -782,7 +783,7 @@ int tget(topics tag, uint64 buf)
   release(&cur_tweet->lock);
   release(&cur_topic.lock);
 
-  wakeup(&getchan);
+  wakeup(&tweetchans[tag]);
   // copyout to the given buffer
   struct proc *p = myproc();
   if( buf != 0 && copyout(p->pagetable, buf, copied_message, sizeof(copied_message)) < 0)

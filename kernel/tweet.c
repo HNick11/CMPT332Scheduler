@@ -9,6 +9,7 @@
 
 int n_tweets;
 
+int tweetchans[NUMTWEETTOPICS];
 struct topic listoftopics[NUMTWEETTOPICS];
 struct tweet spacefortweets[MAXTWEETTOTAL];
 
@@ -22,6 +23,9 @@ void topicinit(){
     for(t = spacefortweets; t < &spacefortweets[MAXTWEETTOTAL]; t++){
         initlock(&t->lock, "tweetlock");
         t->allocated = 0;
+    }
+    for(int x = 0; x < NUMTWEETTOPICS; x++){
+        tweetchans[x] = x;
     }
     n_tweets = 0;
 }
@@ -80,10 +84,7 @@ int removetweet(topics tag, char* message){
     /*
     *   Assumption made that topic lock is held
     */
-    // if no tweet exists aka the linked list is empty, return -1
-    if(listoftopics[x].tweet_list == 0){
-        return -1;
-    }
+    
     int x;
     // find the topic
     for(x = 0; x < NUMTWEETTOPICS; x++){
@@ -91,7 +92,10 @@ int removetweet(topics tag, char* message){
             break;
         }
     }
-
+    // if no tweet exists aka the linked list is empty, return -1
+    if(listoftopics[x].tweet_list == 0){
+        return -1;
+    }
     // copy message into the pointer
     strncpy(message, listoftopics[x].tweet_list->message ,141);
     
