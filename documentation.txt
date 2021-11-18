@@ -1,0 +1,42 @@
+Nicholas Heleta(nwh397) & Grace Biemans(geb965)
+
+Design choice:
+
+We decided to go with a lock per bucket approach. This allows us to minimally restrict concurrency while mainting the functionality we desire.
+The topics are a struct, where each struct has a lock, the head of a linked list of tweets, and the tag. Each tweet is also a struct. It stores the message, an int representing allocation,
+a pointer to the next tweet in the linked list, and a lock.
+
+The nodes in the linked list are allocated via a static array. The array is of size max tweets, thus it should be able to contain all the necessary tweets in the system. By going with this approach, we added in an int into the tweet struct to check if a tweet in the array was in use or not.
+
+Restrictions:
+
+The tweets are restricted by a defined number of topics as per the assignment specification.
+
+
+Files modified and created:
+
+tweettest.c: a userspace program that forks multiple times to test the functionality of the facility.
+
+tweet.c: a file with methods for adding and removing from the created data structure, as well as a padding string function for padding user inputted strings. This file holds the static arrays used by the structure. this file also contains the init method for the data structure to be called at startup.
+
+tweet.h: the header file for tweet.c, contains the two new structs used as the data structure.
+
+types.h: added an enum type called topics as per the assignmnet specification.
+
+param.h: defined maxtweettotal and maxtweettopics, as these are required by the assignment specification.
+
+defs.h: modified so that it contains the headers for all the new functions created in tweet.c.
+
+main.c: modified such that the init function for the data structure is called on startup.
+
+syscall.c: added in the required extern headers and array entries necessary for adding in a system call. this was repeated for each system call implemented.
+
+syscall.h: added in system call numbers for the 4 new systems calls given in the specification.
+
+sysproc.c: created the wrapper functions for the systems calls implemented in proc.c. These wrapper functions check the given parameters before passing them on.
+
+user.h: added in the 4 system call headers
+
+usys.pl: added in the 4  entries for the system calls.
+
+proc.c: implemented the 4 given system calls given by the assignment specification.

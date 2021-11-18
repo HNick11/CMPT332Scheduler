@@ -95,3 +95,63 @@ sys_uptime(void)
   release(&tickslock);
   return xticks;
 }
+
+uint64
+sys_btput(void)
+{
+  int tag;
+  uint64 message;
+
+  if(argint(0, &tag) < 0){
+    return -1;
+  }
+  if(argaddr(1, &message) < 0){
+    return -1;
+  }
+  return btput(tag,message);
+}
+
+uint64
+sys_tput(void)
+{
+  int tag;
+  uint64 message;
+
+  if(argint(0, &tag) < 0){
+    return -1;
+  }
+  if(argaddr(1, &message) < 0){
+    return -1;
+  }
+  return tput(tag,message);
+}
+
+uint64
+sys_btget(void)
+{
+  int tag;
+  uint64 message;
+
+  if(argint(0, &tag) < 0){
+    return -1;
+  }
+  if(argaddr(1, &message) < 0){
+    return -1;
+  }
+  return btget(tag,message);
+}
+
+uint64
+sys_tget(void)
+{
+  int tag;
+  uint64 message;
+
+  if(argint(0, &tag) < 0){
+    return -1;
+  }
+  if(argaddr(1, &message) < 0){
+    return -1;
+  }
+  return tget(tag,message);
+}

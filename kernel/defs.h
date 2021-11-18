@@ -8,6 +8,7 @@ struct spinlock;
 struct sleeplock;
 struct stat;
 struct superblock;
+struct topic;
 
 // bio.c
 void            binit(void);
@@ -104,8 +105,20 @@ void            yield(void);
 int             either_copyout(int user_dst, uint64 dst, void *src, uint64 len);
 int             either_copyin(void *dst, int user_src, uint64 src, uint64 len);
 void            procdump(void);
+int             btput(topics, uint64);
+int             tput(topics, uint64);
+int             btget(topics, uint64);
+int             tget(topics, uint64);
 
-// swtch.S
+// tweet.c
+
+void            topicinit(void);
+int             newtweet(topics, char*);
+int             removetweet(topics, char *);
+struct topic*          grabarray();
+
+
+// swtch.Set
 void            swtch(struct context*, struct context*);
 
 // spinlock.c

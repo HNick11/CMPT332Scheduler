@@ -5,6 +5,7 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "tweet.h"
 
 struct cpu cpus[NCPU];
 
@@ -17,6 +18,13 @@ struct spinlock pid_lock;
 
 extern void forkret(void);
 static void freeproc(struct proc *p);
+
+extern struct topic listoftopics[NUMTWEETTOPICS];
+extern struct tweet spacefortweets[MAXTWEETTOTAL];
+extern int n_tweets;
+
+int putchan = 1;
+int getchan = 2;
 
 extern char trampoline[]; // trampoline.S
 
@@ -653,4 +661,134 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+int btput(topics tag, uint64 message)
+{
+  char copied_message[141];
+  struct proc *p = myproc();
+  copyin(p->pagetable,copied_message,message,141);
+
+  // Check if tag exists
+  if(tag > NUMTWEETTOPICS || tag < 0){
+    return -1;
+  }
+
+  // Get data structure
+  struct topic cur_topic = listoftopics[tag]; 
+  
+  // Get topic lock
+  acquire(&cur_topic.lock);
+  while(newtweet(tag,copied_message) < 0){
+    sleep(&getchan, &cur_topic.lock);
+  }
+  //wakeup(chan needed);
+  release(&cur_topic.lock);
+
+  // tweet put, return 0
+  return 0;
+}
+
+int tput(topics tag, uint64 message)
+{
+  
+  char copied_message[141];
+  struct proc *p = myproc();
+  copyin(p->pagetable,copied_message,message,141);
+
+  // going to need to pad the given string in here
+  // Check if tag exists
+  if(tag > NUMTWEETTOPICS || tag < 0){
+    return -1;
+  }
+
+  // Get data structure
+  struct topic cur_topic = listoftopics[tag]; 
+  
+  // Acquire topic lock
+  acquire(&cur_topic.lock);
+  int val = newtweet(tag, copied_message);
+  release(&cur_topic.lock);
+  
+  // Wakeup process sleeping on this tweets
+  wakeup(&putchan);
+
+
+  return val;
+}
+
+int btget(topics tag, uint64 buf)
+{
+
+  // message needs to be copied into a string, and that copied string is passed into the function
+  char copied_message[141];
+
+  // Check if tag exists
+  if(tag > NUMTWEETTOPICS || tag < 0){
+    return -1;
+  }
+
+  // Get data structure
+  struct topic cur_topic = listoftopics[tag]; 
+
+  // Get locks
+  acquire(&cur_topic.lock);
+  
+  // document the effect of only having two chan's
+  while(removetweet(tag,copied_message) < 0){
+    sleep(&putchan, &cur_topic.lock);
+  }
+  
+  wakeup(&getchan);
+
+  release(&cur_topic.lock);
+
+  
+  // copyout to the given buffer
+  struct proc *p = myproc();
+  if( buf != 0 && copyout(p->pagetable, buf, copied_message, sizeof(copied_message)) < 0)
+  {
+    return -1;  
+  }
+
+  return 0;
+}
+
+int tget(topics tag, uint64 buf)
+{
+  // message needs to be copied into a string, and that copied string is passed into the function
+  char copied_message[141];
+
+  // Check if tag exists
+  if(tag > NUMTWEETTOPICS || tag < 0){
+    return -1;
+  }
+
+  // Get data structure
+  struct topic cur_topic = listoftopics[tag]; 
+
+  // Get locks
+  acquire(&cur_topic.lock);
+  struct tweet *cur_tweet = cur_topic.tweet_list;
+
+  // if there is no tweet to get, throw error
+  if(cur_tweet == 0){
+    release(&cur_topic.lock);
+    return -1;
+  }
+
+  acquire(&cur_tweet->lock);
+  int val = removetweet(tag,copied_message);
+  release(&cur_tweet->lock);
+  release(&cur_topic.lock);
+
+  wakeup(&getchan);
+  // copyout to the given buffer
+  struct proc *p = myproc();
+  if( buf != 0 && copyout(p->pagetable, buf, copied_message, sizeof(copied_message)) < 0)
+  {
+    return -1;  
+  }
+
+  return val;
 }
